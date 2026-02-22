@@ -1,86 +1,103 @@
 import streamlit as st
 import pandas as pd
 import random
-import datetime
+import os
+from datetime import datetime
 from sklearn.linear_model import LinearRegression
 import numpy as np
-import os
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Smart Price Tracker", layout="centered")
+st.set_page_config(page_title="Multi Product Price Tracker", layout="wide")
 
-st.title("🛒 Multi-Ecommerce Smart Price Tracker")
-st.markdown("AI-Based Price Comparison & Prediction System")
+st.title("🛒 Multi-Product Smart Price Tracker")
 
-product_name = st.text_input("Enter Product Name", "iPhone 15 Pro")
-base_price = st.number_input("Enter Approx Base Price", value=75000)
-
+# =============================
+# FUNCTION TO GENERATE PRICE
+# =============================
 def generate_price(base):
-    fluctuation = random.randint(-3000, 3000)
+    fluctuation = random.randint(int(base * -0.05), int(base * 0.05))
     return base + fluctuation
 
-if st.button("Check Latest Prices"):
+# =============================
+# USER INPUT
+# =============================
+product_name = st.text_input("Enter Product Name")
+base_price = st.number_input("Enter Approx Base Price", min_value=100, value=1000)
+
+track_button = st.button("Track Product")
+
+# =============================
+# TRACK PRODUCT
+# =============================
+if track_button and product_name:
+
+    filename = f"{product_name.replace(' ', '_')}.csv"
 
     flipkart_price = generate_price(base_price)
-    amazon_price = generate_price(base_price - 500)
+    amazon_price = generate_price(base_price)
 
-    st.subheader("📦 Today's Prices")
-    st.write(f"Flipkart: ₹{flipkart_price}")
-    st.write(f"Amazon: ₹{amazon_price}")
+    today = datetime.now().strftime("%Y-%m-%d")
 
-    today = datetime.datetime.now()
-
-    new_data = {
+    new_data = pd.DataFrame({
         "Date": [today],
         "Flipkart": [flipkart_price],
         "Amazon": [amazon_price]
-    }
+    })
 
-    new_df = pd.DataFrame(new_data)
-
-    if os.path.exists("price_history.csv"):
-        old_df = pd.read_csv("price_history.csv")
-        df = pd.concat([old_df, new_df], ignore_index=True)
+    if os.path.exists(filename):
+        df = pd.read_csv(filename)
+        df = pd.concat([df, new_data], ignore_index=True)
     else:
-        df = new_df
+        df = new_data
 
-    df.to_csv("price_history.csv", index=False)
+    df.to_csv(filename, index=False)
 
-    st.success("✅ Price history updated.")
+    st.success(f"{product_name} Added Successfully!")
 
-    # Best Deal Logic
-    if flipkart_price < amazon_price:
-        st.success("🔥 Best Deal Today: Flipkart")
-    elif amazon_price < flipkart_price:
-        st.success("🔥 Best Deal Today: Amazon")
-    else:
-        st.info("⚖ Both platforms have same price")
+# =============================
+# SHOW TRACKED PRODUCTS
+# =============================
+st.header("📦 Tracked Products")
 
-    # Smart Alert
-    lowest_flipkart = df["Flipkart"].min()
-    lowest_amazon = df["Amazon"].min()
+csv_files = [f for f in os.listdir() if f.endswith(".csv")]
 
-    if flipkart_price == lowest_flipkart:
-        st.warning("🚨 Flipkart price is lowest ever recorded!")
+if csv_files:
 
-    if amazon_price == lowest_amazon:
-        st.warning("🚨 Amazon price is lowest ever recorded!")
+    selected_file = st.selectbox("Select Product to View", csv_files)
 
-    # AI Prediction
+    df = pd.read_csv(selected_file)
+
+    st.subheader("Price History")
+    st.dataframe(df)
+
+    # =============================
+    # GRAPH
+    # =============================
+    st.subheader("📈 Price Trend")
+
+    df["Day"] = np.arange(len(df))
+
+    plt.figure()
+    plt.plot(df["Day"], df["Flipkart"])
+    plt.plot(df["Day"], df["Amazon"])
+    st.pyplot(plt)
+
+    # =============================
+    # AI PREDICTION
+    # =============================
     if len(df) > 1:
-        df["Index"] = range(len(df))
-        X = df[["Index"]]
+
+        X = df[["Day"]]
         y = df["Flipkart"]
 
         model = LinearRegression()
         model.fit(X, y)
 
         next_day = np.array([[len(df)]])
-        prediction = model.predict(next_day)
+        predicted_price = model.predict(next_day)[0]
 
-        st.info(f"🤖 Predicted Next Flipkart Price: ₹{int(prediction[0])}")
+        st.subheader("🤖 AI Prediction")
+        st.write(f"Predicted Flipkart Price Tomorrow: ₹ {round(predicted_price, 2)}")
 
-        st.subheader("📊 Price Trend Graph")
-        st.line_chart(df[["Flipkart", "Amazon"]])
-
-    else:
-        st.info("Run multiple times to activate AI prediction.")
+else:
+    st.info("No products tracked yet.")
