@@ -3,101 +3,86 @@ import pandas as pd
 import random
 import os
 from datetime import datetime
-from sklearn.linear_model import LinearRegression
-import numpy as np
-import matplotlib.pyplot as plt
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-st.set_page_config(page_title="Multi Product Price Tracker", layout="wide")
+st.set_page_config(page_title="Smart Price Alert System", layout="wide")
 
-st.title("🛒 Multi-Product Smart Price Tracker")
+st.title("🔔 Smart Multi-Product Price Alert System")
 
-# =============================
-# FUNCTION TO GENERATE PRICE
-# =============================
+# =========================
+# EMAIL CONFIG
+# =========================
+SENDER_EMAIL = "mandeepsinghnegi_bca24_27@its.edu.in"
+APP_PASSWORD = "Hero@2006HERO"
+
+# =========================
+# PRICE GENERATOR (Simulated)
+# =========================
 def generate_price(base):
     fluctuation = random.randint(int(base * -0.05), int(base * 0.05))
     return base + fluctuation
 
-# =============================
+# =========================
+# SEND EMAIL FUNCTION
+# =========================
+def send_email(receiver_email, product, price):
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = receiver_email
+        msg["Subject"] = f"Price Alert for {product} 🚨"
+
+        body = f"""
+        Good News!
+
+        The price of {product} has dropped to ₹{price}.
+        This meets your target price.
+
+        Hurry up and buy now!
+        """
+
+        msg.attach(MIMEText(body, "plain"))
+
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, APP_PASSWORD)
+        server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
+        server.quit()
+
+        return True
+    except:
+        return False
+
+# =========================
 # USER INPUT
-# =============================
+# =========================
 product_name = st.text_input("Enter Product Name")
-base_price = st.number_input("Enter Approx Base Price", min_value=100, value=1000)
+base_price = st.number_input("Enter Approx Current Price", min_value=100, value=1000)
+target_price = st.number_input("Enter Your Target Price", min_value=100, value=900)
+user_email = st.text_input("Enter Your Email for Alert")
 
-track_button = st.button("Track Product")
+if st.button("Start Monitoring"):
 
-# =============================
-# TRACK PRODUCT
-# =============================
-if track_button and product_name:
+    if product_name and user_email:
 
-    filename = f"{product_name.replace(' ', '_')}.csv"
+        current_price = generate_price(base_price)
 
-    flipkart_price = generate_price(base_price)
-    amazon_price = generate_price(base_price)
+        st.subheader("Current Price Check")
+        st.write(f"Current Price of {product_name}: ₹ {current_price}")
 
-    today = datetime.now().strftime("%Y-%m-%d")
+        if current_price <= target_price:
 
-    new_data = pd.DataFrame({
-        "Date": [today],
-        "Flipkart": [flipkart_price],
-        "Amazon": [amazon_price]
-    })
+            email_status = send_email(user_email, product_name, current_price)
 
-    if os.path.exists(filename):
-        df = pd.read_csv(filename)
-        df = pd.concat([df, new_data], ignore_index=True)
+            if email_status:
+                st.success("🎉 Price dropped! Email alert sent successfully.")
+            else:
+                st.error("Email sending failed. Check credentials.")
+
+        else:
+            st.info("Price not yet at your target. Keep monitoring!")
+
     else:
-        df = new_data
-
-    df.to_csv(filename, index=False)
-
-    st.success(f"{product_name} Added Successfully!")
-
-# =============================
-# SHOW TRACKED PRODUCTS
-# =============================
-st.header("📦 Tracked Products")
-
-csv_files = [f for f in os.listdir() if f.endswith(".csv")]
-
-if csv_files:
-
-    selected_file = st.selectbox("Select Product to View", csv_files)
-
-    df = pd.read_csv(selected_file)
-
-    st.subheader("Price History")
-    st.dataframe(df)
-
-    # =============================
-    # GRAPH
-    # =============================
-    st.subheader("📈 Price Trend")
-
-    df["Day"] = np.arange(len(df))
-
-    plt.figure()
-    plt.plot(df["Day"], df["Flipkart"])
-    plt.plot(df["Day"], df["Amazon"])
-    st.pyplot(plt)
-
-    # =============================
-    # AI PREDICTION
-    # =============================
-    if len(df) > 1:
-
-        X = df[["Day"]]
-        y = df["Flipkart"]
-
-        model = LinearRegression()
-        model.fit(X, y)
-
-        next_day = np.array([[len(df)]])
-        predicted_price = model.predict(next_day)[0]
-
-        st.subheader("🤖 AI Prediction")
-        st.write(f"Predicted Flipkart Price Tomorrow: ₹ {round(predicted_price, 2)}")
-
-else:
-    st.info("No products tracked yet.")
+        st.warning("Please fill all fields.")
